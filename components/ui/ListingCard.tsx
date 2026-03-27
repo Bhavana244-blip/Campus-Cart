@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Platform } from 'react-native';
 import { Heart, Trash2, Smartphone, Book, Shirt, Sofa, Dribbble, PenTool, Tag } from 'lucide-react-native';
 import { Colors } from '../../constants/colors';
 import { Listing } from '../../types/app.types';
@@ -57,11 +57,31 @@ export default function ListingCard({
         
         <View style={styles.actionsContainer}>
           {isOwnListing ? (
-            <TouchableOpacity style={styles.actionButton} activeOpacity={0.7} onPress={onDelete}>
+            <TouchableOpacity 
+              style={styles.actionButton} 
+              activeOpacity={0.7} 
+              onPress={(e) => {
+                if (Platform.OS === 'web') {
+                  e.stopPropagation();
+                  e.preventDefault();
+                }
+                onDelete?.();
+              }}
+            >
               <Trash2 size={16} color={Colors.danger} />
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity style={styles.actionButton} activeOpacity={0.7} onPress={onWishlistToggle}>
+            <TouchableOpacity 
+              style={styles.actionButton} 
+              activeOpacity={0.7} 
+              onPress={(e) => {
+                if (Platform.OS === 'web') {
+                  e.stopPropagation();
+                  e.preventDefault();
+                }
+                onWishlistToggle?.();
+              }}
+            >
               <Heart size={16} color={isWishlisted ? Colors.danger : Colors.muted} fill={isWishlisted ? Colors.danger : 'transparent'} />
             </TouchableOpacity>
           )}

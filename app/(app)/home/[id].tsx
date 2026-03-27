@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, ActivityIndicator, Alert, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, Heart, MapPin, Tag, Star, Clock } from 'lucide-react-native';
 import { supabase } from '../../../lib/supabase';
@@ -237,16 +237,26 @@ export default function ListingDetailScreen() {
             <TouchableOpacity 
               style={[styles.buyBtn, { backgroundColor: Colors.success }]} 
               onPress={async () => {
-                Alert.alert('Mark as Sold', 'Are you sure you want to mark this item as sold?', [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Mark Sold', onPress: async () => {
-                      const { error } = await supabase.from('listings').update({ is_sold: true }).eq('id', listing.id);
-                      if (!error) {
-                        setListing({ ...listing, is_sold: true });
-                        Alert.alert('Success', 'Item marked as sold!');
-                      }
-                  }}
-                ]);
+                const proceed = Platform.OS === 'web'
+                  ? window.confirm('Are you sure you want to mark this item as sold?')
+                  : await new Promise<boolean>((resolve) => {
+                      Alert.alert('Mark as Sold', 'Are you sure you want to mark this item as sold?', [
+                        { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+                        { text: 'Mark Sold', onPress: () => resolve(true) }
+                      ]);
+                    });
+
+                if (proceed) {
+                  const { error } = await supabase.from('listings').update({ is_sold: true }).eq('id', listing.id);
+                  if (!error) {
+                    setListing({ ...listing, is_sold: true });
+                    if (Platform.OS === 'web') {
+                      window.alert('Item marked as sold!');
+                    } else {
+                      Alert.alert('Success', 'Item marked as sold!');
+                    }
+                  }
+                }
               }}
             >
               <Text style={styles.buyBtnText}>Mark as Sold (Accepted)</Text>

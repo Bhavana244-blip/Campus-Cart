@@ -108,31 +108,34 @@ export default function HomeScreen() {
     }
   };
 
-  const handleDeleteListing = (listingId: string) => {
-    Alert.alert(
-      'Delete Listing',
-      'Are you sure you want to delete this listing?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Delete', 
-          style: 'destructive',
-          onPress: async () => {
-            const { error } = await supabase
-              .from('listings')
-              .update({ is_active: false })
-              .eq('id', listingId);
-              
-            if (!error) {
-              LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-              setListings(listings.filter(item => item.id !== listingId));
-            } else {
-              Alert.alert('Error', 'Failed to delete listing.');
-            }
-          }
-        }
-      ]
-    );
+  const handleDeleteListing = async (listingId: string) => {
+    const proceed = Platform.OS === 'web'
+      ? window.confirm('Are you sure you want to delete this listing?')
+      : await new Promise<boolean>((resolve) => {
+          Alert.alert(
+            'Delete Listing',
+            'Are you sure you want to delete this listing?',
+            [
+              { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+              { text: 'Delete', style: 'destructive', onPress: () => resolve(true) }
+            ]
+          );
+        });
+
+    if (proceed) {
+      const { error } = await supabase
+        .from('listings')
+        .delete()
+        .eq('id', listingId);
+        
+      if (!error) {
+        if (Platform.OS !== 'web') LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        setListings(listings.filter((item: any) => item.id !== listingId));
+      } else {
+        if (Platform.OS === 'web') alert('Failed to delete listing.');
+        else Alert.alert('Error', 'Failed to delete listing.');
+      }
+    }
   };
 
   const renderHeader = () => (
@@ -233,6 +236,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
   },
+
   header: {
     paddingHorizontal: 16,
     paddingTop: 16,

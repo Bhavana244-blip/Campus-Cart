@@ -33,7 +33,7 @@ interface PostListingModalProps {
 }
 
 export default function PostListingModal({ visible, onClose }: PostListingModalProps) {
-  const { appUser } = useAuthStore();
+  const { appUser, session } = useAuthStore();
   
   const [images, setImages] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -104,7 +104,8 @@ export default function PostListingModal({ visible, onClose }: PostListingModalP
         const response = await fetch(manipResult.uri);
         const blob = await response.blob();
         
-        const path = `${appUser.auth_user_id}/${listingId}/${i}.jpg`;
+        const userId = session?.user?.id || appUser.auth_user_id;
+        const path = `${userId}/${listingId}/${i}.jpg`;
         const { data, error } = await supabase.storage
           .from('listing-images')
           .upload(path, blob, { contentType: 'image/jpeg', upsert: true });

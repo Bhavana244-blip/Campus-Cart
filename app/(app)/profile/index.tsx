@@ -54,31 +54,33 @@ export default function ProfileScreen() {
   };
 
   const handleDeleteListing = async (listingId: string) => {
-    Alert.alert(
-      'Remove this listing?',
-      'Are you sure you want to permanently delete this item?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Remove', 
-          style: 'destructive',
-          onPress: async () => {
-            const { error } = await supabase
-              .from('listings')
-              .update({ is_active: false })
-              .eq('id', listingId);
-              
-            if (error) {
-              showToast('Error', 'Failed to remove listing', 'error');
-            } else {
-              LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-              setMyListings(prev => prev.filter(item => item.id !== listingId));
-              showToast('Deleted', 'Listing removed successfully', 'info');
-            }
-          }
-        }
-      ]
-    );
+    const proceed = Platform.OS === 'web'
+      ? window.confirm('Are you sure you want to permanently delete this item?')
+      : await new Promise<boolean>((resolve) => {
+          Alert.alert(
+            'Remove this listing?',
+            'Are you sure you want to permanently delete this item?',
+            [
+              { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+              { text: 'Remove', style: 'destructive', onPress: () => resolve(true) }
+            ]
+          );
+        });
+
+    if (proceed) {
+      const { error } = await supabase
+        .from('listings')
+        .delete()
+        .eq('id', listingId);
+        
+      if (error) {
+        showToast('Error', 'Failed to remove listing', 'error');
+      } else {
+        if (Platform.OS !== 'web') LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        setMyListings(prev => prev.filter(item => item.id !== listingId));
+        showToast('Deleted', 'Listing removed successfully', 'info');
+      }
+    }
   };
 
   const handleLogout = async () => {
@@ -195,11 +197,11 @@ export default function ProfileScreen() {
                   <ListingCard
                     listing={item}
                     sellerName={appUser.full_name}
+                    isOwnListing={true}
+                    onDelete={() => handleDeleteListing(item.id)}
                     onPress={() => router.push(`/(app)/home/${item.id}`)}
                   />
-                  <TouchableOpacity style={styles.deleteListingBtn} onPress={() => handleDeleteListing(item.id)}>
-                    <Trash2 size={16} color="#fff" />
-                  </TouchableOpacity>
+
                 </View>
               ))}
             </View>

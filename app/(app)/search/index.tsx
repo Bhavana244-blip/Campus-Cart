@@ -268,6 +268,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 16,
   },
+
   defaultStateContainer: {
     padding: 24,
   },

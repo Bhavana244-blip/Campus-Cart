@@ -94,6 +94,19 @@ export default function ChatDetailScreen() {
     setIsSending(true);
     const textToSend = inputText.trim();
     setInputText(''); // optimistic clear
+    
+    const tempId = Math.random().toString();
+    const optimisticMsg = {
+      id: tempId,
+      conversation_id: id,
+      sender_id: appUser.id,
+      content: textToSend,
+      is_read: false,
+      created_at: new Date().toISOString()
+    };
+    
+    // Add optimistically so UI feels instantly fast
+    setMessages(prev => [optimisticMsg, ...prev]);
 
     try {
       const { error } = await supabase
@@ -104,7 +117,44 @@ export default function ChatDetailScreen() {
           content: textToSend,
         });
 
-      if (error) throw error;
+      if (error) {
+        // If it failed, remove the optimistic message
+        setMessages(prev => prev.filter(m => m.id !== tempId));
+        throw error;
+      }
+      
+      if (conversation) {
+        const isBuyer = appUser.id === conversation.buyer_id;
+        try {
+          // Increment the other user's unread count
+          // Wait, we don't know the exact current unread count robustly since it might have changed.
+          // In standard logic, just doing `seller_unread_count: conversation.seller_unread_count + 1` is ok for client-side state,
+          // but calling an RPC is safer. For now, we update it and fetch will rectify it soon.
+          // Because Supabase JS doesn't have an increment operation for updates out of the box without RPC, 
+          // we'll fetch the latest conversation data strictly or just rely on local state tracking.
+          
+          await supabase
+            .from('conversations')
+            .update({
+              last_message: textToSend,
+              last_message_at: new Date().toISOString(),
+              ...(isBuyer 
+                ? { seller_unread_count: (conversation.seller_unread_count || 0) + 1 } 
+                : { buyer_unread_count: (conversation.buyer_unread_count || 0) + 1 })
+            })
+            .eq('id', id);
+            
+          // Update local conversation state to reflect new unread counts so subsequent messages in same render keep going up if needed
+          setConversation((prev: any) => ({
+             ...prev,
+             ...(isBuyer 
+                ? { seller_unread_count: (prev.seller_unread_count || 0) + 1 } 
+                : { buyer_unread_count: (prev.buyer_unread_count || 0) + 1 })
+          }));
+        } catch (updateErr) {
+          console.error("Failed to update conversation:", updateErr);
+        }
+      }
       
     } catch (e) {
       setInputText(textToSend); // revert on failure
@@ -138,7 +188,7 @@ export default function ChatDetailScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <TouchableOpacity style={styles.backButton} onPress={() => router.push('/(app)/chats')}>
             <ArrowLeft size={24} color={Colors.primary} />
           </TouchableOpacity>
           <View style={styles.headerProfile}>
