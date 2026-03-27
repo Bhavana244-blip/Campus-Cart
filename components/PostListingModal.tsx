@@ -104,7 +104,7 @@ export default function PostListingModal({ visible, onClose }: PostListingModalP
         const response = await fetch(manipResult.uri);
         const blob = await response.blob();
         
-        const path = `${appUser.id}/${listingId}/${i}.jpg`;
+        const path = `${appUser.auth_user_id}/${listingId}/${i}.jpg`;
         const { data, error } = await supabase.storage
           .from('listing-images')
           .upload(path, blob, { contentType: 'image/jpeg', upsert: true });
