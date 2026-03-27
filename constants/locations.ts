@@ -1,0 +1,22 @@
+export const LOCATIONS = [
+  'Tech Park (TP)',
+  'University Building (UB)',
+  'Admin Block',
+  'Computing Block',
+  'Architecture Block',
+  'MBA Block',
+  'Pharmacy Block',
+  'Dental Block',
+  'Medical Block',
+  'Science & Humanities Block',
+  'Engineering Block',
+  'Central Library',
+  'Main Auditorium',
+  'Indoor Stadium',
+  'Main Canteen / Food Court',
+  'TP Canteen',
+  'UB Canteen',
+  'SRM Hospital',
+  'Basketball Court',
+  'Ground / Open Area'
+];
