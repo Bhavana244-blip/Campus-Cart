@@ -46,17 +46,20 @@ export default function ListingCardSkeleton() {
 
 const styles = StyleSheet.create({
   container: {
-    width: CARD_WIDTH,
+    flex: 1,
+    maxWidth: 400,
+    minWidth: 160,
     backgroundColor: Colors.card,
     borderRadius: 16,
     overflow: 'hidden',
-    marginBottom: 16,
+    marginBottom: 20,
     borderWidth: 1,
     borderColor: Colors.border,
+    margin: 6,
   },
   imageSkeleton: {
     width: '100%',
-    height: CARD_WIDTH,
+    aspectRatio: 1,
     backgroundColor: Colors.border,
   },
   content: {

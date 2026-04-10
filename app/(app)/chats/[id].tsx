@@ -20,27 +20,29 @@ export default function ChatDetailScreen() {
   const [otherUser, setOtherUser] = useState<any>(null);
 
   useEffect(() => {
-    fetchConversationData();
-    markAsRead();
+    if (appUser?.id) {
+      fetchConversationData();
+      markAsRead();
 
-    // Subscribe to new messages
-    const messageChannel = supabase
-      .channel(`messages:${id}`)
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'messages',
-        filter: `conversation_id=eq.${id}`,
-      }, (payload) => {
-        setMessages(prev => [payload.new, ...prev]);
-        markAsRead(); // Mark new incoming message as read
-      })
-      .subscribe();
+      // Subscribe to new messages via Supabase Realtime
+      const messageChannel = supabase
+        .channel(`messages:${id}`)
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `conversation_id=eq.${id}`,
+        }, (payload) => {
+          setMessages(prev => [payload.new, ...prev]);
+          markAsRead();
+        })
+        .subscribe();
 
-    return () => {
-      supabase.removeChannel(messageChannel);
-    };
-  }, [id]);
+      return () => {
+        supabase.removeChannel(messageChannel);
+      };
+    }
+  }, [id, appUser]);
 
   const fetchConversationData = async () => {
     const { data: convData } = await supabase
@@ -125,14 +127,8 @@ export default function ChatDetailScreen() {
       
       if (conversation) {
         const isBuyer = appUser.id === conversation.buyer_id;
+        
         try {
-          // Increment the other user's unread count
-          // Wait, we don't know the exact current unread count robustly since it might have changed.
-          // In standard logic, just doing `seller_unread_count: conversation.seller_unread_count + 1` is ok for client-side state,
-          // but calling an RPC is safer. For now, we update it and fetch will rectify it soon.
-          // Because Supabase JS doesn't have an increment operation for updates out of the box without RPC, 
-          // we'll fetch the latest conversation data strictly or just rely on local state tracking.
-          
           await supabase
             .from('conversations')
             .update({
@@ -144,7 +140,6 @@ export default function ChatDetailScreen() {
             })
             .eq('id', id);
             
-          // Update local conversation state to reflect new unread counts so subsequent messages in same render keep going up if needed
           setConversation((prev: any) => ({
              ...prev,
              ...(isBuyer 
@@ -189,13 +184,13 @@ export default function ChatDetailScreen() {
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity style={styles.backButton} onPress={() => router.push('/(app)/chats')}>
-            <ArrowLeft size={24} color={Colors.primary} />
+            <ArrowLeft size={24} color={Colors.primary} strokeWidth={2.5} />
           </TouchableOpacity>
           <View style={styles.headerProfile}>
-            <Avatar name={otherUser?.full_name || 'U'} url={otherUser?.avatar_url} size={40} />
+            <Avatar name={otherUser?.full_name || 'U'} url={otherUser?.avatar_url} size={44} />
             <View style={styles.headerText}>
               <Text style={styles.headerName}>{otherUser?.full_name || 'Loading...'}</Text>
-              <Text style={styles.headerStatus}>SRM KTR Student</Text>
+              <Text style={styles.headerStatus}>SRM KTR Student • Online</Text>
             </View>
           </View>
         </View>
@@ -211,22 +206,25 @@ export default function ChatDetailScreen() {
         />
 
         {/* Input Area */}
-        <View style={styles.inputContainer}>
-          <TextInput
-            style={styles.input}
-            placeholder="Type a message..."
-            value={inputText}
-            onChangeText={setInputText}
-            multiline
-            maxLength={2000}
-          />
-          <TouchableOpacity 
-            style={[styles.sendButton, (!inputText.trim() || isSending) && styles.sendButtonDisabled]} 
-            onPress={sendMessage}
-            disabled={!inputText.trim() || isSending}
-          >
-            <ArrowUp size={20} color="#fff" />
-          </TouchableOpacity>
+        <View style={styles.inputWrapper}>
+          <View style={styles.inputContainer}>
+            <TextInput
+              style={styles.input}
+              placeholder="Start a campus deal..."
+              placeholderTextColor="#9EA0C1"
+              value={inputText}
+              onChangeText={setInputText}
+              multiline
+              maxLength={2000}
+            />
+            <TouchableOpacity 
+              style={[styles.sendButton, (!inputText.trim() || isSending) && styles.sendButtonDisabled]} 
+              onPress={sendMessage}
+              disabled={!inputText.trim() || isSending}
+            >
+              <ArrowUp size={22} color="#fff" strokeWidth={3} />
+            </TouchableOpacity>
+          </View>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -244,16 +242,22 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: Colors.card,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    backgroundColor: '#fff',
+    borderBottomWidth: 3,
+    borderBottomColor: '#F3F4F6',
   },
   backButton: {
-    padding: 8,
-    marginRight: 8,
-    marginLeft: -8,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#FAF5FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+    borderWidth: 2,
+    borderColor: '#DDD6FE',
   },
   headerProfile: {
     flexDirection: 'row',
@@ -261,24 +265,25 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerText: {
-    marginLeft: 12,
+    marginLeft: 14,
   },
   headerName: {
     fontFamily: 'Sora_700Bold',
-    fontSize: 16,
-    color: Colors.primary,
+    fontSize: 17,
+    color: '#1E1B4B',
   },
   headerStatus: {
-    fontFamily: 'Sora_400Regular',
-    fontSize: 12,
-    color: Colors.muted,
+    fontFamily: 'Sora_600SemiBold',
+    fontSize: 11,
+    color: '#22C55E', // Green for online
   },
   messageList: {
-    padding: 16,
+    padding: 20,
+    paddingBottom: 40,
   },
   messageBubbleContainer: {
-    marginBottom: 24,
-    maxWidth: '80%',
+    marginBottom: 20,
+    maxWidth: '85%',
   },
   messageMeRow: {
     alignSelf: 'flex-end',
@@ -287,27 +292,34 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   messageBubble: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
   },
   messageBubbleMe: {
     backgroundColor: Colors.primary,
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    borderBottomLeftRadius: 18,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderBottomLeftRadius: 20,
     borderBottomRightRadius: 4,
+    borderWidth: 2,
+    borderColor: '#6D28D9',
   },
   messageBubbleOther: {
-    backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
+    backgroundColor: '#fff',
+    borderWidth: 2,
+    borderColor: '#DDD6FE',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
     borderBottomLeftRadius: 4,
-    borderBottomRightRadius: 18,
+    borderBottomRightRadius: 20,
   },
   messageText: {
-    fontFamily: 'Sora_400Regular',
+    fontFamily: 'Sora_500Medium',
     fontSize: 15,
     lineHeight: 22,
   },
@@ -315,13 +327,13 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   messageTextOther: {
-    color: Colors.primary,
+    color: '#1E1B4B',
   },
   messageTime: {
     fontFamily: 'Sora_400Regular',
     fontSize: 10,
-    color: Colors.muted,
-    marginTop: 6,
+    color: '#9EA0C1',
+    marginTop: 8,
   },
   messageTimeMe: {
     alignSelf: 'flex-end',
@@ -329,41 +341,50 @@ const styles = StyleSheet.create({
   messageTimeOther: {
     alignSelf: 'flex-start',
   },
+  inputWrapper: {
+    backgroundColor: '#fff',
+    borderTopWidth: 3,
+    borderTopColor: '#F3F4F6',
+    paddingBottom: Platform.OS === 'ios' ? 95 : 75, // Lift above TabBar
+  },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: Colors.card,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    gap: 12,
   },
   input: {
     flex: 1,
-    backgroundColor: Colors.background,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 20,
+    backgroundColor: '#FAF5FF',
+    borderWidth: 2,
+    borderColor: '#DDD6FE',
+    borderRadius: 16,
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 12,
-    minHeight: 40,
+    minHeight: 48,
     maxHeight: 120,
     fontFamily: 'Sora_400Regular',
     fontSize: 15,
-    color: Colors.primary,
+    color: '#1E1B4B',
   },
   sendButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: Colors.primary,
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: Colors.accent, // Transaction Green
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 12,
-    marginBottom: 2,
+    shadowColor: Colors.accent,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   sendButtonDisabled: {
-    opacity: 0.5,
+    backgroundColor: '#E5E7EB',
+    shadowOpacity: 0,
+    elevation: 0,
   },
 });

@@ -5,12 +5,16 @@ export interface AppUser {
   full_name: string;
   department?: string;
   year?: string;
+  registration_number?: string;
   avatar_url?: string;
   rating: number;
   total_ratings: number;
   sold_count: number;
   is_active: boolean;
   created_at: string;
+  xp: number;
+  level: number;
+  title?: string;
 }
 
 export interface Listing {

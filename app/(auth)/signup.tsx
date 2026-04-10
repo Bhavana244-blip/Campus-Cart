@@ -13,6 +13,7 @@ export default function SignupScreen() {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [registrationNumber, setRegistrationNumber] = useState('');
   const [department, setDepartment] = useState('');
   const [year, setYear] = useState('');
   const [error, setError] = useState('');
@@ -23,7 +24,7 @@ export default function SignupScreen() {
   const [showYearModal, setShowYearModal] = useState(false);
 
   const handleSignup = async () => {
-    if (!fullName || !email || !password || !department || !year) {
+    if (!fullName || !email || !password || !department || !year || !registrationNumber) {
       setError('Please fill out all fields.');
       return;
     }
@@ -51,6 +52,7 @@ export default function SignupScreen() {
           full_name: fullName.trim(),
           department,
           year,
+          registration_number: registrationNumber.trim(),
         });
         
         if (profileError) {
@@ -111,6 +113,18 @@ export default function SignupScreen() {
           />
         </View>
 
+        <View style={styles.inputContainer}>
+          <Text style={styles.label}>Registration Number</Text>
+          <TextInput
+            style={[styles.input, error && !registrationNumber ? styles.inputError : null]}
+            placeholder="RA2111003010xxx"
+            value={registrationNumber}
+            onChangeText={(text) => { setRegistrationNumber(text); setError(''); }}
+            autoCapitalize="characters"
+            autoCorrect={false}
+          />
+        </View>
+
         {/* Dropdowns */}
         <View style={styles.row}>
           <View style={[styles.inputContainer, { flex: 1, marginRight: 8 }]}>
@@ -161,9 +175,9 @@ export default function SignupScreen() {
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
         <TouchableOpacity 
-          style={[styles.button, isLoading || !fullName || !email || !password || !department || !year ? styles.buttonDisabled : null]} 
+          style={[styles.button, isLoading || !fullName || !email || !password || !department || !year || !registrationNumber ? styles.buttonDisabled : null]} 
           onPress={handleSignup}
-          disabled={isLoading || !fullName || !email || !password || !department || !year}
+          disabled={isLoading || !fullName || !email || !password || !department || !year || !registrationNumber}
           activeOpacity={0.8}
         >
           {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign Up</Text>}

@@ -9,19 +9,27 @@ import { useListingsStore } from '../../../stores/listingsStore';
 import Avatar from '../../../components/ui/Avatar';
 import Toast from '../../../components/ui/Toast';
 import { formatDistanceToNow } from 'date-fns';
+import { XP_RULES, calculateLevel } from '../../../lib/gamify';
 
 const { width } = Dimensions.get('window');
 
 export default function ListingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { appUser } = useAuthStore();
+  const { appUser, setAppUser } = useAuthStore();
   const { wishlistedIds, setWishlistedIds } = useListingsStore();
   
   const [listing, setListing] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [toastVisible, setToastVisible] = useState(false);
+  const [toastMsg, setToastMsg] = useState({ title: '', message: '', type: 'success' as any });
+
+  const showToast = (title: string, message: string, type: 'success' | 'error' | 'info') => {
+    setToastMsg({ title, message, type });
+    setToastVisible(true);
+    setTimeout(() => setToastVisible(false), 3000);
+  };
 
   useEffect(() => {
     fetchListing();
@@ -250,7 +258,20 @@ export default function ListingDetailScreen() {
                   const { error } = await supabase.from('listings').update({ is_sold: true }).eq('id', listing.id);
                   if (!error) {
                     setListing({ ...listing, is_sold: true });
-                    if (Platform.OS === 'web') {
+                    
+                    // Award XP for successful sale
+                    if (appUser) {
+                      const newXp = (appUser.xp || 0) + XP_RULES.COMPLETE_SALE;
+                      const newLevel = calculateLevel(newXp);
+                      
+                      setAppUser({
+                        ...appUser,
+                        xp: newXp,
+                        level: newLevel,
+                      });
+                      
+                      showToast('Cha-Ching! 💰', `You earned ${XP_RULES.COMPLETE_SALE} XP for this sale!`, 'success');
+                    } else if (Platform.OS === 'web') {
                       window.alert('Item marked as sold!');
                     } else {
                       Alert.alert('Success', 'Item marked as sold!');
@@ -274,7 +295,7 @@ export default function ListingDetailScreen() {
         </View>
       )}
 
-      <Toast visible={toastVisible} title="Seller Notified!" message="The seller has been notified of your interest." type="success" />
+      <Toast visible={toastVisible} title={toastMsg.title || "Seller Notified!"} message={toastMsg.message || "The seller has been notified of your interest."} type={toastMsg.type || "success"} />
     </View>
   );
 }
@@ -312,16 +333,17 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   scrollContent: {
-    paddingBottom: 100,
+    paddingBottom: 200, // Extra padding to clear the lifted bottom bar
   },
   imageCarousel: {
     width: width,
     height: width,
+    backgroundColor: '#1E1B4B', // Dark background to frame contained images
   },
   image: {
     width: width,
     height: width,
-    resizeMode: 'cover',
+    resizeMode: 'contain',
   },
   detailsContainer: {
     padding: 20,
@@ -453,17 +475,22 @@ const styles = StyleSheet.create({
   },
   bottomBar: {
     position: 'absolute',
-    bottom: 0,
+    bottom: Platform.OS === 'ios' ? 95 : 75, // Lift above TabBar
     left: 0,
     right: 0,
     backgroundColor: Colors.card,
     flexDirection: 'row',
     paddingHorizontal: 20,
     paddingVertical: 16,
-    paddingBottom: 32,
+    paddingBottom: 16,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
     gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 20,
   },
   chatBtn: {
     flex: 1,

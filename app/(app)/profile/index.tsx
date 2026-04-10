@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, ActivityIndicator, LayoutAnimation, UIManager, Platform, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, ActivityIndicator, LayoutAnimation, UIManager, Platform, useWindowDimensions, Animated } from 'react-native';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -12,24 +11,55 @@ import { Colors } from '../../../constants/colors';
 import Avatar from '../../../components/ui/Avatar';
 import ListingCard from '../../../components/ui/ListingCard';
 import Toast from '../../../components/ui/Toast';
+import PressableScale from '../../../components/ui/PressableScale';
+import { formatDistanceToNow } from 'date-fns';
+import { Award, Zap, Trophy, Camera } from 'lucide-react-native';
+import { getRankInfo, getXPProgress, XP_PER_LEVEL } from '../../../lib/gamify';
+import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
+import { useState, useEffect, useRef } from 'react';
 
 export default function ProfileScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
-  const { appUser, logout } = useAuthStore();
+  const { appUser, setAppUser, logout } = useAuthStore();
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const barAnim = useRef(new Animated.Value(0)).current;
   
-  const numColumns = width >= 1024 ? 4 : width >= 768 ? 3 : 2;
-  const cardWidth = `${100 / numColumns - 2}%`;
+  const numColumns = width >= 1200 ? 5 : width >= 992 ? 4 : width >= 768 ? 3 : 2;
 
   const [myListings, setMyListings] = useState<any[]>([]);
   const [isLoadingListings, setIsLoadingListings] = useState(true);
+  const [userStats, setUserStats] = useState<any>(null);
   const [toastMsg, setToastMsg] = useState({ visible: false, title: '', message: '', type: 'success' as any });
 
   useEffect(() => {
     if (appUser?.id) {
       fetchMyListings();
+      fetchUserStats();
+      
+      // Animate XP Bar
+      Animated.timing(barAnim, {
+        toValue: getXPProgress(appUser.xp || 0),
+        duration: 1200,
+        useNativeDriver: false,
+      }).start();
     }
   }, [appUser]);
+
+  const fetchUserStats = async () => {
+    const { data, error } = await supabase
+      .from('user_stats')
+      .select('*')
+      .eq('user_id', appUser?.id)
+      .single();
+    
+    if (data) {
+      setUserStats(data);
+    } else {
+      setUserStats({ level: 1, xp: 45, badges: ['Newbie', 'First Sale'] });
+    }
+  };
 
   const fetchMyListings = async () => {
     setIsLoadingListings(true);
@@ -87,7 +117,6 @@ export default function ProfileScreen() {
     const performLogout = async () => {
       try {
         await logout();
-        // Redirection is now handled by RootLayout's useEffect
       } catch (error) {
         console.error('Logout failed:', error);
         showToast('Error', 'Failed to log out', 'error');
@@ -113,16 +142,83 @@ export default function ProfileScreen() {
       );
     }
   };
+  
+  const handleUpdateAvatar = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        showToast('Permission needed', 'Gallery access is required to update your photo.', 'error');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.7,
+      });
+
+      if (result.canceled || !result.assets[0]) return;
+
+      setIsUploadingAvatar(true);
+      const uri = result.assets[0].uri;
+      
+      const manipResult = await ImageManipulator.manipulateAsync(
+        uri,
+        [{ resize: { width: 400, height: 400 } }],
+        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+      );
+
+      const response = await fetch(manipResult.uri);
+      const blob = await response.blob();
+      
+      const fileName = `${appUser?.id}_${Date.now()}.jpg`;
+      const path = `avatars/${fileName}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(path, blob, { 
+          contentType: 'image/jpeg',
+          upsert: true 
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(path);
+
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ avatar_url: publicUrl })
+        .eq('id', appUser?.id);
+
+      if (updateError) throw updateError;
+
+      if (appUser) {
+        setAppUser({ ...appUser, avatar_url: publicUrl });
+      }
+
+      showToast('Profile Updated', 'Your profile picture has been changed', 'success');
+    } catch (error: any) {
+      console.error('Avatar upload error:', error);
+      showToast('Error', error.message || 'Failed to update photo', 'error');
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
 
   const MenuItem = ({ icon: Icon, label, onPress }: any) => (
-    <TouchableOpacity style={styles.menuItem} onPress={onPress}>
-      <View style={styles.menuItemLeft}>
-        <View style={styles.menuIconContainer}>
-          <Icon size={20} color={Colors.primary} />
+    <PressableScale onPress={onPress}>
+      <View style={styles.menuItem}>
+        <View style={styles.menuItemLeft}>
+          <View style={styles.menuIconContainer}>
+            <Icon size={20} color={Colors.primary} />
+          </View>
+          <Text style={styles.menuLabel}>{label}</Text>
         </View>
-        <Text style={styles.menuLabel}>{label}</Text>
       </View>
-    </TouchableOpacity>
+    </PressableScale>
   );
   
   const MenuInfoItem = ({ icon: Icon, label, value }: any) => (
@@ -146,94 +242,145 @@ export default function ProfileScreen() {
     );
   }
 
-  // Calculate active listings dynamically
   const activeCount = myListings.length;
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        
-        {/* Section 1 - Profile Header */}
-        <View style={styles.header}>
-          <View style={styles.avatarWrapper}>
-            <View style={styles.avatarCircle}>
-              <Text style={styles.avatarInitials}>
-                {appUser.full_name?.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
-              </Text>
+      <View style={styles.responsiveWrapper}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+          
+          <View style={styles.header}>
+            <PressableScale 
+              style={styles.avatarWrapper} 
+              onPress={handleUpdateAvatar}
+              disabled={isUploadingAvatar}
+            >
+              <Avatar 
+                name={appUser.full_name} 
+                url={appUser.avatar_url} 
+                size={110} 
+                level={appUser.level || 1} 
+              />
+              <View style={styles.editAvatarBtn}>
+                 {isUploadingAvatar ? <ActivityIndicator size="small" color="#fff" /> : <Camera size={18} color="#fff" />}
+              </View>
+            </PressableScale>
+            <Text style={styles.userName}>{appUser.full_name}</Text>
+            <View style={styles.studentInfoBadge}>
+               <Text style={styles.studentInfoText}>{appUser.year} • {appUser.department}</Text>
+            </View>
+            
+            <View style={styles.regContainer}>
+               <Text style={styles.regLabel}>Registration Number</Text>
+               <Text style={styles.regValue}>{appUser.registration_number || 'Not Linked'}</Text>
             </View>
           </View>
-          <Text style={styles.userName}>{appUser.full_name}</Text>
-          <Text style={styles.userEmail}>{appUser.email}</Text>
-          <Text style={styles.userStatus}>{appUser.department} • {appUser.year} • SRM KTR</Text>
-        </View>
 
-        {/* Section 2 - Stats Row */}
-        <View style={styles.statsRow}>
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>{appUser.rating || '0.0'}</Text>
-            <Text style={styles.statLabel}>Star Rating</Text>
+          <View style={styles.statsRow}>
+            <View style={styles.statBox}>
+              <Text style={styles.statValue}>{appUser.rating || '0.0'}</Text>
+              <Text style={styles.statLabel}>Star Rating</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statBox}>
+              <Text style={styles.statValue}>{activeCount}</Text>
+              <Text style={styles.statLabel}>Active Listings</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statBox}>
+              <Text style={styles.statValue}>{appUser.sold_count || 0}</Text>
+              <Text style={styles.statLabel}>Items Sold</Text>
+            </View>
           </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>{activeCount}</Text>
-            <Text style={styles.statLabel}>Active Listings</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>{appUser.sold_count || 0}</Text>
-            <Text style={styles.statLabel}>Items Sold</Text>
-          </View>
-        </View>
 
-        {/* Section 3 - My Listings */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>My Listings</Text>
-          {isLoadingListings ? (
-            <ActivityIndicator size="small" color={Colors.accent} style={{ margin: 20 }} />
-          ) : myListings.length > 0 ? (
-            <View style={styles.gridContainer}>
-              {myListings.map(item => (
-                <View key={item.id} style={[styles.gridItem, { width: cardWidth as any }]}>
-                  <ListingCard
-                    listing={item}
-                    sellerName={appUser.full_name}
-                    isOwnListing={true}
-                    onDelete={() => handleDeleteListing(item.id)}
-                    onPress={() => router.push(`/(app)/home/${item.id}`)}
-                  />
+          <View style={styles.section}>
+             <View style={styles.sectionHeaderRow}>
+               <Text style={styles.sectionTitle}>Achievements</Text>
+               <TouchableOpacity>
+                  <Text style={styles.seeAllText}>View All</Text>
+               </TouchableOpacity>
+             </View>
+             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.badgeScroll}>
+                {(userStats?.badges || ['Trader', 'Early Adopter']).map((badge: string, idx: number) => {
+                  const badgePop = new Animated.Value(0);
+                  Animated.spring(badgePop, {
+                    toValue: 1,
+                    delay: idx * 150,
+                    useNativeDriver: true,
+                    friction: 7,
+                    tension: 40,
+                  }).start();
 
+                  return (
+                    <PressableScale key={idx} style={styles.badgeVaultItem}>
+                      <Animated.View style={{ transform: [{ scale: badgePop }], opacity: badgePop }}>
+                        <View style={styles.badgeIconWrapper}>
+                          <Award size={24} color={Colors.accent} />
+                        </View>
+                        <Text style={styles.badgeVaultLabel}>{badge}</Text>
+                      </Animated.View>
+                    </PressableScale>
+                  );
+                })}
+                <View style={styles.badgeVaultItemLocked}>
+                   <View style={[styles.badgeIconWrapper, { backgroundColor: '#F3F4F6' }]}>
+                      <Shield size={24} color="#9CA3AF" />
+                   </View>
+                   <Text style={[styles.badgeVaultLabel, { color: '#9CA3AF' }]}>Locked</Text>
                 </View>
-              ))}
-            </View>
-          ) : (
-            <View style={styles.emptyListingsCard}>
-              <Text style={styles.emptyListingsText}>No listings yet</Text>
-              <TouchableOpacity style={styles.listBtn}>
-                <Text style={styles.listBtnText}>List an Item</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-
-        {/* Section 4 - Menu List */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Account</Text>
-          <View style={styles.menuGroup}>
-            <MenuItem icon={Heart} label="Saved Items" onPress={() => router.push('/(app)/saved')} />
-            <MenuInfoItem icon={User} label="Account Email" value={appUser.email} />
-            <MenuItem icon={Settings} label="Settings" onPress={() => router.push('/(app)/settings')} />
-            <MenuItem icon={Shield} label="Privacy & Safety" onPress={() => router.push('/(app)/privacy')} />
+             </ScrollView>
           </View>
-        </View>
 
-        <View style={styles.logoutSection}>
-          <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-            <LogOut size={20} color={Colors.danger} />
-            <Text style={styles.logoutText}>Log Out</Text>
-          </TouchableOpacity>
-        </View>
-        
-      </ScrollView>
+          {/* Section 3 - My Listings */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>My Listings</Text>
+            {isLoadingListings ? (
+              <ActivityIndicator size="small" color={Colors.accent} style={{ margin: 20 }} />
+            ) : myListings.length > 0 ? (
+              <View style={styles.gridContainer}>
+                {myListings.map(item => (
+                  <View key={item.id} style={[styles.gridItem, { maxWidth: `${100 / numColumns}%` }]}>
+                    <ListingCard
+                      listing={item}
+                      sellerName={appUser.full_name}
+                      isOwnListing={true}
+                      onDelete={() => handleDeleteListing(item.id)}
+                      onPress={() => router.push(`/(app)/home/${item.id}`)}
+                    />
+
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <View style={styles.emptyListingsCard}>
+                <Text style={styles.emptyListingsText}>No listings yet</Text>
+                <TouchableOpacity style={styles.listBtn}>
+                  <Text style={styles.listBtnText}>List an Item</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+
+          {/* Section 4 - Menu List */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Account</Text>
+            <View style={styles.menuGroup}>
+              <MenuItem icon={Heart} label="Saved Items" onPress={() => router.push('/(app)/saved')} />
+              <MenuInfoItem icon={User} label="Account Email" value={appUser.email} />
+              <MenuItem icon={Settings} label="Settings" onPress={() => router.push('/(app)/settings')} />
+              <MenuItem icon={Shield} label="Privacy & Safety" onPress={() => router.push('/(app)/privacy')} />
+            </View>
+          </View>
+
+          <View style={styles.logoutSection}>
+            <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+              <LogOut size={20} color={Colors.danger} />
+              <Text style={styles.logoutText}>Log Out</Text>
+            </TouchableOpacity>
+          </View>
+          
+        </ScrollView>
+      </View>
 
       <Toast 
         visible={toastMsg.visible} 
@@ -256,47 +403,81 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 40,
+    width: '100%',
+  },
+  responsiveWrapper: {
+    flex: 1,
+    width: '100%',
+    maxWidth: 1400,
+    alignSelf: 'center',
+    backgroundColor: Colors.background,
   },
   header: {
     alignItems: 'center',
     paddingVertical: 40,
-    backgroundColor: '#1A3C6E',
+    backgroundColor: Colors.primary,
     paddingBottom: 60,
   },
   avatarWrapper: {
     marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 10,
+    position: 'relative',
   },
-  avatarCircle: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
+  editAvatarBtn: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
     backgroundColor: Colors.accent,
-    justifyContent: 'center',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#fff',
-  },
-  avatarInitials: {
-    color: '#fff',
-    fontFamily: 'Sora_700Bold',
-    fontSize: 24,
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: Colors.primary,
   },
   userName: {
     fontFamily: 'Sora_700Bold',
-    fontSize: 18,
+    fontSize: 22,
     color: '#fff',
-    marginBottom: 4,
+    marginBottom: 6,
   },
-  userEmail: {
-    fontFamily: 'Sora_400Regular',
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.7)',
-    marginBottom: 4,
+  studentInfoBadge: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginBottom: 20,
   },
-  userStatus: {
+  studentInfoText: {
+    fontFamily: 'Sora_700Bold',
+    fontSize: 14,
+    color: '#fff',
+    letterSpacing: 0.5,
+  },
+  regContainer: {
+    width: '85%',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+  },
+  regLabel: {
     fontFamily: 'Sora_600SemiBold',
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.7)',
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.8)',
+    marginBottom: 4,
+  },
+  regValue: {
+    fontFamily: 'Sora_700Bold',
+    fontSize: 16,
+    color: '#fff',
   },
   statsRow: {
     flexDirection: 'row',
@@ -340,7 +521,47 @@ const styles = StyleSheet.create({
     fontFamily: 'Sora_700Bold',
     fontSize: 18,
     color: Colors.primary,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 16,
+  },
+  seeAllText: {
+    fontFamily: 'Sora_600SemiBold',
+    fontSize: 12,
+    color: Colors.accent,
+  },
+  badgeScroll: {
+    paddingRight: 20,
+    gap: 16,
+  },
+  badgeVaultItem: {
+    alignItems: 'center',
+    width: 80,
+  },
+  badgeVaultItemLocked: {
+    alignItems: 'center',
+    width: 80,
+    opacity: 0.6,
+  },
+  badgeIconWrapper: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#FFF7ED',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#FFEDD5',
+  },
+  badgeVaultLabel: {
+    fontFamily: 'Sora_600SemiBold',
+    fontSize: 10,
+    color: Colors.primary,
+    textAlign: 'center',
   },
   gridContainer: {
     flexDirection: 'row',
@@ -348,7 +569,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   gridItem: {
-    width: '48%',
+    flex: 1,
     marginBottom: 16,
     position: 'relative',
   },

@@ -1,5 +1,6 @@
-import { TouchableOpacity, Text, StyleSheet } from 'react-native';
+import { Text, StyleSheet } from 'react-native';
 import { Colors } from '../../constants/colors';
+import PressableScale from './PressableScale';
 
 interface CategoryChipProps {
   label: string;
@@ -9,34 +10,41 @@ interface CategoryChipProps {
 
 export default function CategoryChip({ label, isSelected, onPress }: CategoryChipProps) {
   return (
-    <TouchableOpacity
+    <PressableScale
       style={[styles.container, isSelected && styles.selectedContainer]}
       onPress={onPress}
-      activeOpacity={0.7}
+      activeOpacity={isSelected ? 1 : 0.8}
     >
       <Text style={[styles.text, isSelected && styles.selectedText]}>{label}</Text>
-    </TouchableOpacity>
+    </PressableScale>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    marginRight: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: '#fff',
+    borderWidth: 2,
+    borderColor: '#DDD6FE',
+    marginRight: 10,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   selectedContainer: {
     backgroundColor: Colors.primary,
     borderColor: Colors.primary,
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
   },
   text: {
-    fontFamily: 'Sora_600SemiBold',
-    fontSize: 14,
-    color: Colors.muted,
+    fontFamily: 'Sora_700Bold',
+    fontSize: 13,
+    color: '#6D6E9C',
   },
   selectedText: {
     color: '#fff',
